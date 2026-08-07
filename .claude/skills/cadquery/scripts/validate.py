@@ -12,6 +12,7 @@ import runpy
 import sys
 import time
 from pathlib import Path
+from typing import cast
 
 
 def main() -> int:
@@ -42,19 +43,19 @@ def main() -> int:
         print("VALIDATE: FAIL (script ran but exported no CAD files)")
         return 1
 
-    from cadquery import importers
+    from cadquery import Shape, importers
 
     ok = True
     for p in sorted(set(produced)):
         if p.suffix.lower() in {".step", ".stp"}:
             shape = importers.importStep(str(p))
-            solids = shape.solids().vals()
+            solids = cast("list[Shape]", shape.solids().vals())
             if not solids:
                 print(f"{p.name}: NO SOLIDS — broken export")
                 ok = False
                 continue
             total = sum(s.Volume() for s in solids)
-            bb = shape.val().BoundingBox()
+            bb = cast("Shape", shape.val()).BoundingBox()
             print(
                 f"{p.name}: {len(solids)} solid(s), volume {total:.3f} mm^3, "
                 f"bbox {bb.xlen:.2f} x {bb.ylen:.2f} x {bb.zlen:.2f} mm"
