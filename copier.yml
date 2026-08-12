@@ -9,4 +9,3 @@ package_name:
 _tasks:
   - command: 'git init .'
   - command: 'uv add --dev ruff mypy pytest pre-commit'
-  - command: 'uv run pre-commit install'
