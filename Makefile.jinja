@@ -5,3 +5,8 @@ watch:
 .PHONY: build
 build:
 	axe src/**/*.py -- uv run {{ project_name }} -- build
+
+.PHONY: setup
+setup:
+	uv sync
+	uv run pre-commit install
