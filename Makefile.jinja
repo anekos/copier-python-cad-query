@@ -1,10 +1,14 @@
-.PHONY: watch
-watch:
-	axe src/**/*.py -- uv run {{ project_name }} -- build --show
+.PHONY: interactive
+interactive:
+	uv run {{ project_name }} -- interactive
 
 .PHONY: build
 build:
 	axe src/**/*.py -- uv run {{ project_name }} -- build
+
+.PHONY: watch
+watch:
+	axe src/**/*.py -- uv run {{ project_name }} -- build --show
 
 .PHONY: setup
 setup:
