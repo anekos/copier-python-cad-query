@@ -1,8 +1,9 @@
 # CadQuery project convention (anekos)
 
 New CadQuery projects live under `~/forge/cad/CadQuery/{project-name}/` as uv-managed,
-src-layout packages with a click CLI. Model code goes in `main.py` (pydantic `Param` +
-`build()`), CLI wiring in `__init__.py`. Match this layout exactly unless told otherwise.
+src-layout packages with a click CLI. Model code (a `click_cadquery.BuildParam` subclass
++ pure `build()`) and CLI wiring (`click_cadquery.define_app`) both live in `__init__.py`.
+Match this layout exactly unless told otherwise.
 
 ## Layout
 
@@ -17,8 +18,7 @@ src-layout packages with a click CLI. Model code goes in `main.py` (pydantic `Pa
 ├── README.md
 └── src/
     └── {package_name}/       # snake_case
-        ├── __init__.py       # click CLI
-        └── main.py           # Param model + build()
+        └── __init__.py       # Param model + build() + CLI (main)
 ```
 
 ## pyproject.toml
@@ -51,7 +51,6 @@ dev = [
     "click>=8.4.2",
     "click-cadquery>=0.2.0",
     "mypy>=2.3.0",
-    "pre-commit>=4.6.1",
     "pydantic>=2.13.4",
     "pytest>=9.1.1",
     "ruff>=0.16.1",
@@ -62,17 +61,19 @@ mypy_path = "src"
 explicit_package_bases = true
 ```
 
-All dependencies (including cadquery) go in the `dev` dependency-group; `dependencies` stays empty.
+All dependencies (including cadquery) go in the `dev` dependency-group; `dependencies`
+stays empty. `pre-commit` is not listed here — the copier template installs it via a
+post-generation task, and `make setup` runs `pre-commit install`.
 
-## src/{package_name}/main.py — model code
+## src/{package_name}/__init__.py — model + CLI
 
 ```python
 import cadquery as cq
+from click_cadquery import BuildParam, define_app
 from click_cadquery.git import version_number as ver
-from pydantic import BaseModel
 
 
-class Param(BaseModel):
+class Param(BuildParam):
     width: int = 100
     height: int = 100
     depth: int = 100
@@ -87,63 +88,43 @@ def build(param: Param) -> cq.Workplane:
     result = cq.Workplane("XY")
     # ... model here ...
     return result
+
+
+main = define_app(Param, build)
 ```
 
 - Every dimension that might change becomes a `Param` field with a default.
 - `filename` embeds `version_number()` (commit count from git — the repo must have
   at least one commit) plus the parameter values.
 - `build()` is pure: takes `Param`, returns the `Workplane`; no I/O.
-
-## src/{package_name}/__init__.py — CLI
-
-```python
-from pathlib import Path
-
-import click
-from cadquery import vis
-from click_cadquery import define_options
-
-from .main import Param, build
-
-TypePath = click.types.Path(path_type=Path)
-
-
-@click.group(context_settings={"show_default": True})
-@click.pass_context
-def main(ctx: click.Context) -> None:
-    pass
-
-
-@main.command(name="build")
-@define_options(Param)
-def command_build(output: Path | None, param: Param, show: bool) -> None:
-    print("Build with:", param)
-
-    result = build(param)
-
-    dist = Path("dist")
-    dist.mkdir(exist_ok=True)
-    result.export(str(output if output else dist / param.filename))
-    if show:
-        vis.show(result)
-```
-
-`@define_options(Param)` (from click-cadquery) turns each `Param` field into a
-`--width`-style click option and injects `output` / `param` / `show` into the function.
+- `define_app(Param, build)` (from click-cadquery) builds the CLI: a `build` command with
+  options generated from `Param`'s fields (plus `output` argument, `--show`, `--screenshot`),
+  and an `interactive` command that prompts for each field one at a time. The result must
+  stay bound to `main` — `pyproject.toml`'s `project.scripts` points at `{package_name}:main`.
 
 ## Makefile
 
 ```make
-.PHONY: watch
-watch:
-	axe src/**/*.py -- uv run {project-name} -- build --show
+.PHONY: interactive
+interactive:
+	uv run {project-name} -- interactive
 
 .PHONY: build
 build:
 	axe src/**/*.py -- uv run {project-name} -- build
+
+.PHONY: watch
+watch:
+	axe src/**/*.py -- uv run {project-name} -- build --show
+
+.PHONY: setup
+setup:
+	uv sync
+	uv run pre-commit install
 ```
 
-(`axe` is a file-watcher; the `build` target rebuilds on every source change.)
+(`axe` is a file-watcher; `build` rebuilds on every source change, `watch` does the same
+but also opens/refreshes the viewer via `--show`.)
 
 ## Setup and daily commands
 
@@ -151,12 +132,14 @@ Run everything from the project root — `dist/` is created relative to the CWD.
 
 ```bash
 git init && git add -A && git commit -m "init"   # version_number() needs a commit
-uv sync                                          # creates .venv from the dev group
+make setup                                       # uv sync + pre-commit install
 uv run {project-name} build                      # export to dist/v{N}-....stl
 uv run {project-name} build --width 120 --show   # override params, open viewer
+uv run {project-name} interactive                # prompt for each Param field, then build
 uv run mypy src && uv run ruff check src         # lint before committing
 ```
 
 Agents verifying a model non-interactively: run `uv run {project-name} build`
-(never `--show`; `vis.show` opens a GUI) and check the exported file in `dist/`,
-or import `build(Param())` directly and inspect `val().Volume()` / `BoundingBox()`.
+(never `--show`; `vis.show` opens a GUI) — `--screenshot` is fine, it just saves a PNG
+next to the output — and check the exported file in `dist/`, or import `build(Param())`
+directly and inspect `val().Volume()` / `BoundingBox()`.

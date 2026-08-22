@@ -12,8 +12,9 @@ Python parametric CAD library on the OCCT kernel. Generated against **cadquery 2
 CadQuery projects live under `~/forge/cad/CadQuery/{name}/` as uv-managed src-layout
 packages with a click CLI (`uv run {name} build` exports to `dist/`). When creating or
 working in a project, follow `references/project-template.md` exactly: model code is a
-pydantic `Param` + pure `build(param) -> Workplane` in `main.py`; CLI wiring via
-`click_cadquery.define_options` in `__init__.py`.
+`click_cadquery.BuildParam` subclass (`Param`) + pure `build(param) -> Workplane`, wired
+into a CLI (`build` and `interactive` commands) via `click_cadquery.define_app(Param,
+build)`, all in `__init__.py`.
 
 For throwaway experiments outside a project:
 

@@ -31,4 +31,4 @@ def build(param: Param) -> cq.Workplane:
     return result
 
 
-define_app(Param, build)
+main = define_app(Param, build)
