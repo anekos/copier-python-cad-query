@@ -1,30 +1,34 @@
-from pathlib import Path
-
-import click
-from cadquery import vis
-from click_cadquery import define_options
-
-from .main import Param, build
-
-TypePath = click.types.Path(path_type=Path)
+import cadquery as cq
+from click_cadquery import BuildParam, define_app
+from click_cadquery.git import version_number as ver
 
 
-@click.group(context_settings={"show_default": True})
-@click.pass_context
-def main(ctx: click.Context) -> None:
-    # ctx.obj = App()
-    pass
+class Param(BuildParam):
+    width: int = 100
+    height: int = 100
+    depth: int = 100
+    thickness: float = 2.0
+
+    @property
+    def filename(self) -> str:
+        return f"v{ver()}-{self.width}w{self.height}h{self.depth}d{self.thickness}t.stl"
 
 
-@main.command(name="build")
-@define_options(Param)
-def command_build(output: Path | None, param: Param, show: bool) -> None:
-    print("Build with:", param)
+def build(param: Param) -> cq.Workplane:
+    result = cq.Workplane("XY")
 
-    result = build(param)
+    result = result.box(
+        length=param.depth,
+        height=param.height,
+        width=param.width,
+    )
 
-    dist = Path("dist")
-    dist.mkdir(exist_ok=True)
-    result.export(str(output if output else dist / param.filename))
-    if show:
-        vis.show(result)
+    result = result.faces(">Z").shell(param.thickness, kind="intersection")
+
+    fillet = param.thickness / 2
+    result = result.edges("|Z").fillet(fillet)
+
+    return result
+
+
+define_app(Param, build)
